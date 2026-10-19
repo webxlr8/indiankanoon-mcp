@@ -9,7 +9,7 @@ FROM node:24-alpine
 ENV NODE_ENV=production \
     NODE_OPTIONS=--disable-warning=ExperimentalWarning \
     MCP_TRANSPORT=http \
-    MCP_HTTP_HOST=0.0.0.0 \
+    MCP_HTTP_HOST=:: \
     PORT=3000 \
     DATA_DIR=/data \
     IK_CACHE_DIR=/data/cache \
