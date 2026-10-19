@@ -3,7 +3,7 @@ WORKDIR /app
 COPY package.json package-lock.json tsconfig.json ./
 RUN npm ci
 COPY src ./src
-RUN npm run build && npm prune --omit=dev
+RUN npm run build && mkdir -p public && npm pack --pack-destination public --silent && npm prune --omit=dev
 
 FROM node:24-alpine
 ENV NODE_ENV=production \
@@ -17,6 +17,7 @@ ENV NODE_ENV=production \
 WORKDIR /app
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
+COPY --from=build /app/public ./public
 COPY package.json ./
 RUN mkdir -p /data && chown node:node /data
 USER node

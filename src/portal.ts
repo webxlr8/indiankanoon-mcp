@@ -1,5 +1,5 @@
 /** Self-contained key-generation page served at "/". No external assets. */
-export function portalHtml(opts: { publicSignup: boolean; adminEnabled: boolean }): string {
+export function portalHtml(opts: { publicSignup: boolean; adminEnabled: boolean; version: string }): string {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -36,8 +36,9 @@ small{color:var(--muted)}
 <body>
 <main>
 <h1>Indian Kanoon MCP</h1>
-<p class="lead">Search and read Indian judgments and statutes from Claude, Codex, Cursor, ChatGPT or any MCP client. Create a connection key, then paste the setup for your client.</p>
+<p class="lead">Search and read Indian judgments and statutes from Claude, Codex, Cursor, ChatGPT or any MCP client. Two ways to use it: <a href="#create">hosted</a> (create a key here and connect by URL) or <a href="#local">local</a> (runs on your computer with your own Indian Kanoon token).</p>
 
+<h2 style="margin-top:0">Hosted</h2>
 <div class="card" id="create">
   <strong>Create a connection key</strong>
   <form id="f">
@@ -66,6 +67,13 @@ small{color:var(--muted)}
   <div class="card" id="snippet"></div>
 </div>
 
+<h2 id="local">Use it locally</h2>
+<div class="card">
+  <p style="margin-top:0">Only need your Indian Kanoon API token. The server runs on your computer and calls Indian Kanoon directly with your token; nothing goes through this site. Needs <a href="https://nodejs.org/">Node.js</a> 22.13 or later.</p>
+  <div class="tabs" id="ltabs"></div>
+  <div id="lsnippet"></div>
+</div>
+
 <h2>Check a key</h2>
 <div class="card">
   <label>Connection key</label>
@@ -88,6 +96,7 @@ small{color:var(--muted)}
 </main>
 <script>
 const origin = location.origin;
+const pkg = origin + "/local/indiankanoon-mcp-${opts.version}.tgz";
 const $ = (id) => document.getElementById(id);
 const esc = (s) => s.replace(/[&<>]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
 function block(title, code, note) {
@@ -110,19 +119,33 @@ function snippets(key) {
 }
 function showKey(key) {
   $("keyText").textContent = key;
-  const s = snippets(key);
-  const tabs = $("tabs");
+  renderTabs("tabs", "snippet", snippets(key));
+  $("result").classList.remove("hidden");
+  $("result").scrollIntoView({ behavior: "smooth" });
+}
+function localSnippets() {
+  const env = { IK_API_TOKEN: "YOUR_INDIAN_KANOON_TOKEN", IK_DAILY_BUDGET_INR: "50" };
+  const npxServer = { command: "npx", args: ["-y", pkg], env };
+  return {
+    "Quick setup": block("1. Run this in a terminal", "npx -y " + pkg + " setup", "2. Paste your Indian Kanoon API token when asked. 3. Open a new chat in Claude Code, Claude Desktop, Codex or Cursor and ask a legal question. The setup finds these apps and connects them for you."),
+    "Claude Code": block("Run in a terminal", "claude mcp add indiankanoon --scope user -e IK_API_TOKEN=YOUR_INDIAN_KANOON_TOKEN -e IK_DAILY_BUDGET_INR=50 -- npx -y " + pkg),
+    "Claude Desktop": block("Settings → Developer → Edit config, then restart", JSON.stringify({ mcpServers: { indiankanoon: npxServer } }, null, 2), "If Claude Desktop cannot find npx, use Quick setup instead."),
+    "Codex": block("~/.codex/config.toml", '[mcp_servers.indiankanoon]\\ncommand = "npx"\\nargs = ["-y", "' + pkg + '"]\\nenv = { IK_API_TOKEN = "YOUR_INDIAN_KANOON_TOKEN", IK_DAILY_BUDGET_INR = "50" }'),
+    "Cursor": block("~/.cursor/mcp.json", JSON.stringify({ mcpServers: { indiankanoon: npxServer } }, null, 2)),
+  };
+}
+function renderTabs(tabsId, targetId, s) {
+  const tabs = $(tabsId);
   tabs.innerHTML = "";
   Object.keys(s).forEach((name, i) => {
     const b = document.createElement("button");
     b.type = "button"; b.textContent = name;
-    b.onclick = () => { [...tabs.children].forEach((x) => x.classList.remove("on")); b.classList.add("on"); $("snippet").innerHTML = s[name]; };
+    b.onclick = () => { [...tabs.children].forEach((x) => x.classList.remove("on")); b.classList.add("on"); $(targetId).innerHTML = s[name]; };
     tabs.appendChild(b);
     if (i === 0) b.click();
   });
-  $("result").classList.remove("hidden");
-  $("result").scrollIntoView({ behavior: "smooth" });
 }
+renderTabs("ltabs", "lsnippet", localSnippets());
 document.addEventListener("click", (e) => {
   if (e.target.classList.contains("copy")) {
     const text = e.target.parentElement.textContent.replace(/^Copy/, "");

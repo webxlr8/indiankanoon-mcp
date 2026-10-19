@@ -4,8 +4,8 @@ An MCP server for the [Indian Kanoon API](https://api.indiankanoon.org/). It let
 
 You can run it in two ways:
 
+- **Local.** Enter your Indian Kanoon API token once; the server runs on your computer for Claude Code, Claude Desktop, Codex and Cursor. See [Local use](#local-use-your-token-your-computer).
 - **Hosted (multi-user).** One server, many users. Each user creates a connection key on the web page and connects any MCP client by URL. A REST API and an OpenAPI spec are included for clients that do not speak MCP.
-- **Local (stdio).** The server runs on your machine for your own clients, using your own Indian Kanoon token.
 
 ## Tools
 
@@ -77,6 +77,7 @@ docker run -d -p 3000:3000 -v ikdata:/data -e PUBLIC_URL=https://kanoon.example.
 - `IK_API_TOKEN` and `ADMIN_TOKEN` are optional in hosted mode. Without them, every key must bring its own Indian Kanoon token. Set both to let the owner issue keys that spend from the server's token.
 - Mount `/data` on a persistent volume. It holds `keys.db` (SQLite), the spend ledgers, the cache and court-copy downloads.
 - Health check: `GET /healthz`.
+- The image also serves its own npm package at `/local/indiankanoon-mcp-<version>.tgz`, which the local setup command installs from.
 
 ### Admin API
 
@@ -86,30 +87,19 @@ Send `Authorization: Bearer <ADMIN_TOKEN>`.
 - `GET /api/admin/keys` lists keys and the combined spend on the server token.
 - `PATCH /api/admin/keys/<id>` with `{"disabled":true}` or `{"daily_budget_inr":200}` changes a key.
 
-## Local use (stdio)
+## Local use: your token, your computer
 
-Requires Node.js 22.13 or later.
-
-```bash
-npm install
-```
+All you need is your Indian Kanoon API token and [Node.js](https://nodejs.org/) 22.13 or later. Run:
 
 ```bash
-npm run build
+npx -y https://kanoon.wx8.org/local/indiankanoon-mcp-1.2.0.tgz setup
 ```
 
-```bash
-claude mcp add indiankanoon --scope user -e IK_API_TOKEN=your-token -e IK_DAILY_BUDGET_INR=50 -- node "/absolute/path/to/dist/index.js"
-```
+Paste your token when asked. Setup checks the token (one Rs 0.02 call), installs the server in `~/.indiankanoon-mcp`, and connects the apps it finds: Claude Code, Claude Desktop, Codex and Cursor. Then open a new chat in any of them and ask a legal question. The server runs on your machine and calls Indian Kanoon directly; nothing goes through the hosted site.
 
-For Codex, add this to `~/.codex/config.toml`:
+Run setup again to change the token or cap, or to update. Options: `--token`, `--budget`, `--clients claude-code,claude-desktop,codex,cursor`, `--yes` (no questions), `--skip-check`.
 
-```toml
-[mcp_servers.indiankanoon]
-command = "node"
-args = ["/absolute/path/to/dist/index.js"]
-env = { IK_API_TOKEN = "your-token", IK_DAILY_BUDGET_INR = "50" }
-```
+To configure a client by hand instead, start the server with `npx -y https://kanoon.wx8.org/local/indiankanoon-mcp-1.2.0.tgz` and set `IK_API_TOKEN` (and optionally `IK_DAILY_BUDGET_INR`) in its environment. From a git checkout, `npm install && npm run build`, then use `node dist/index.js`.
 
 ## Configuration
 

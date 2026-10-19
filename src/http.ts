@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { createReadStream, promises as fs } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
@@ -13,8 +14,9 @@ import type { Logger } from "./logger.js";
 import { portalHtml } from "./portal.js";
 import { Tenants } from "./tenants.js";
 import { buildTools, registerTools, SERVER_INSTRUCTIONS, type ToolContext } from "./tools.js";
+import { VERSION } from "./version.js";
 
-export const VERSION = "1.1.0";
+export { VERSION };
 const MAX_BODY_BYTES = 1_000_000;
 const DOWNLOAD_TTL_MS = 24 * 3600 * 1000;
 /** Puttaswamy (2017): a stable document used to check that a submitted Indian Kanoon token works (one Rs 0.02 metadata call). */
@@ -148,7 +150,9 @@ export async function createHttpApp({ cfg, cache, log, fetchImpl }: HttpDeps): P
   const perKey = new RateLimiter(cfg.rateLimitPerMin, 60_000);
   const signups = new RateLimiter(10, 3600_000);
   const doFetch: FetchLike = fetchImpl ?? ((u, i) => fetch(u, i));
-  const portal = portalHtml({ publicSignup: cfg.publicSignup, adminEnabled: Boolean(cfg.adminToken) });
+  const portal = portalHtml({ publicSignup: cfg.publicSignup, adminEnabled: Boolean(cfg.adminToken), version: VERSION });
+  // `npm pack` output baked into the Docker image, so anyone can install the local (stdio) server with npx.
+  const packageDir = process.env.PACKAGE_DIR ?? path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "public");
 
   const baseUrl = (req: IncomingMessage): string => {
     if (cfg.publicUrl) return cfg.publicUrl;
@@ -355,6 +359,23 @@ export async function createHttpApp({ cfg, cache, log, fetchImpl }: HttpDeps): P
       if (typeof args !== "object" || Array.isArray(args)) throw new HttpError(400, "Body must be a JSON object of tool arguments.");
       const out = await tool.handler(args as Record<string, unknown>);
       return send(res, out.isError ? 422 : 200, { text: out.content.map((c) => c.text).join("\n"), isError: Boolean(out.isError) });
+    }
+
+    const pkg = p.match(/^\/local\/indiankanoon-mcp(?:-(\d+\.\d+\.\d+))?\.tgz$/);
+    if (pkg && (req.method === "GET" || req.method === "HEAD")) {
+      if (pkg[1] && pkg[1] !== VERSION) throw new HttpError(404, `Version ${pkg[1]} is not available; current is ${VERSION}.`);
+      const file = path.join(packageDir, `indiankanoon-mcp-${VERSION}.tgz`);
+      const st = await fs.stat(file).catch(() => null);
+      if (!st) throw new HttpError(404, "Local package is not available on this server.");
+      res.writeHead(200, {
+        "content-type": "application/gzip",
+        "content-length": String(st.size),
+        "cache-control": pkg[1] ? "public, max-age=31536000, immutable" : "no-cache",
+        "content-disposition": `attachment; filename="indiankanoon-mcp-${VERSION}.tgz"`,
+      });
+      if (req.method === "HEAD") return void res.end();
+      createReadStream(file).pipe(res);
+      return;
     }
 
     const dl = p.match(/^\/download\/(\d+\.[a-z]{2,4})$/);
