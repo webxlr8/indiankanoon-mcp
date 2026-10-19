@@ -1,3 +1,5 @@
+import { randomBytes } from "node:crypto";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -92,9 +94,11 @@ export function loadConfig(): Config {
   }
 
   const httpHost = str("MCP_HTTP_HOST", "127.0.0.1");
-  const secretKey = str("SECRET_KEY", "");
-  if (transport === "http" && secretKey.length < 32) {
-    throw new Error("SECRET_KEY must be set to at least 32 random characters for the HTTP transport (e.g. `openssl rand -hex 32`).");
+  const dataDir = path.resolve(str("DATA_DIR", cacheDir));
+  let secretKey = str("SECRET_KEY", "");
+  if (transport === "http") {
+    if (!secretKey) secretKey = loadOrCreateSecret(dataDir);
+    if (secretKey.length < 32) throw new Error("SECRET_KEY must be at least 32 random characters (e.g. `openssl rand -hex 32`).");
   }
   const adminToken = str("ADMIN_TOKEN", "");
   if (adminToken && adminToken.length < 24) throw new Error("ADMIN_TOKEN must be at least 24 characters.");
@@ -127,10 +131,27 @@ export function loadConfig(): Config {
     adminToken,
     publicSignup: bool("PUBLIC_SIGNUP", true),
     publicUrl: str("PUBLIC_URL", "").replace(/\/+$/, ""),
-    dataDir: path.resolve(str("DATA_DIR", cacheDir)),
+    dataDir,
     houseDailyBudgetInr: num("HOUSE_DAILY_BUDGET_INR", 200),
     keyDefaultBudgetInr: num("KEY_DEFAULT_BUDGET_INR", 50),
     shareCache: bool("IK_SHARE_CACHE", true),
     rateLimitPerMin: num("RATE_LIMIT_PER_MIN", 120, 1),
   };
+}
+
+/**
+ * Without SECRET_KEY the server creates one in the data directory on first
+ * start and reuses it afterwards. Losing this file makes stored Indian Kanoon
+ * tokens unreadable, so the data directory must be on persistent storage.
+ */
+function loadOrCreateSecret(dataDir: string): string {
+  const file = path.join(dataDir, "secret.key");
+  try {
+    return readFileSync(file, "utf8").trim();
+  } catch {
+    mkdirSync(dataDir, { recursive: true });
+    const secret = randomBytes(32).toString("hex");
+    writeFileSync(file, `${secret}\n`, { mode: 0o600, flag: "wx" });
+    return secret;
+  }
 }

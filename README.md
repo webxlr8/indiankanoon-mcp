@@ -69,12 +69,12 @@ docker build -t indiankanoon-mcp .
 ```
 
 ```bash
-docker run -d -p 3000:3000 -v ikdata:/data -e SECRET_KEY="$(openssl rand -hex 32)" -e ADMIN_TOKEN="$(openssl rand -hex 24)" -e IK_API_TOKEN=your-indian-kanoon-token -e PUBLIC_URL=https://kanoon.example.com indiankanoon-mcp
+docker run -d -p 3000:3000 -v ikdata:/data -e PUBLIC_URL=https://kanoon.example.com indiankanoon-mcp
 ```
 
 - Put it behind HTTPS (Coolify, Traefik, Caddy or nginx). Set `PUBLIC_URL` to the public address.
-- Keep `SECRET_KEY` stable. Changing it makes the stored Indian Kanoon tokens unreadable, and those keys stop working.
-- `IK_API_TOKEN` is optional in hosted mode. Without it, every key must bring its own Indian Kanoon token.
+- `SECRET_KEY` is optional. Without it, the server creates `/data/secret.key` on first start and reuses it. Keep it stable: changing or losing it makes stored Indian Kanoon tokens unreadable, and those keys stop working.
+- `IK_API_TOKEN` and `ADMIN_TOKEN` are optional in hosted mode. Without them, every key must bring its own Indian Kanoon token. Set both to let the owner issue keys that spend from the server's token.
 - Mount `/data` on a persistent volume. It holds `keys.db` (SQLite), the spend ledgers, the cache and court-copy downloads.
 - Health check: `GET /healthz`.
 
@@ -119,7 +119,7 @@ env = { IK_API_TOKEN = "your-token", IK_DAILY_BUDGET_INR = "50" }
 |---|---|---|
 | `MCP_TRANSPORT` | `stdio` | `stdio` or `http` (the Docker image sets `http`) |
 | `IK_API_TOKEN` | required for stdio | The server's own Indian Kanoon token |
-| `SECRET_KEY` | required for http | 32+ random characters |
+| `SECRET_KEY` | auto-created in `DATA_DIR` | 32+ random characters |
 | `ADMIN_TOKEN` | empty | Owner token for keys on the server token and for the admin API |
 | `PUBLIC_SIGNUP` | `true` | Anyone can create a key with their own Indian Kanoon token |
 | `PUBLIC_URL` | from request | Public base URL used in links |
